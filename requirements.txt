@@ -2,6 +2,5 @@ streamlit>=1.28.0
 yfinance>=0.2.30
 pandas>=2.0.0
 numpy>=1.24.0
+pandas_ta>=0.3.14b
 matplotlib>=3.7.0
-lxml>=4.9.0
-html5lib>=1.1
