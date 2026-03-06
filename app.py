@@ -1,4 +1,3 @@
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -124,15 +123,29 @@ def analyze_swing_trade(df):
     
     # Indicadores de Momentum (RSI e MACD)
     df['RSI'] = ta.rsi(df['Close'], length=14)
+    
+    # MACD com tratamento de nomes de coluna (varia por versão do pandas_ta)
     macd = ta.macd(df['Close'])
     df = pd.concat([df, macd], axis=1)
+    
+    # Normaliza nomes de colunas do MACD para garantir compatibilidade
+    macd_cols = [col for col in df.columns if 'MACD' in col and 'signal' not in col.lower() and 'hist' not in col.lower()]
+    macd_sig_cols = [col for col in df.columns if 'MACDs' in col or ('signal' in col.lower() and 'MACD' in col)]
+    macd_hist_cols = [col for col in df.columns if 'MACDh' in col or ('hist' in col.lower() and 'MACD' in col)]
+    
+    if macd_cols:
+        df['_MACD'] = df[macd_cols[0]]
+    if macd_sig_cols:
+        df['_MACD_signal'] = df[macd_sig_cols[0]]
+    if macd_hist_cols:
+        df['_MACD_hist'] = df[macd_hist_cols[0]]
     
     # Volatilidade (ATR para Stops Dinâmicos)
     df['ATR'] = ta.atr(df['High'], df['Low'], df['Close'], length=14)
     
-    # Bandas de Bollinger
-    bbands = ta.bbands(df['Close'], length=20)
-    df = pd.concat([df, bbands], axis=1)
+    # Bandas de Bollinger (opcional - não usado na lógica atual, mas mantido para referência)
+    # bbands = ta.bbands(df['Close'], length=20)
+    # df = pd.concat([df, bbands], axis=1)
 
     return df
 
@@ -183,12 +196,17 @@ def generate_signal(df, capital, risk_pct, atr_mult=2.0, rr_ratio=3.0):
     
     rsi_ok = 40 < last['RSI'] < 70
     
-    macd_ok = (
-        last['MACD_12_26_9'] > last['MACDs_12_26_9'] and
-        last['MACDh_12_26_9'] > 0
-    )
+    # ✅ CORREÇÃO: Usa nomes normalizados do MACD para evitar KeyError
+    try:
+        macd_val = last.get('_MACD', 0)
+        macd_sig = last.get('_MACD_signal', 0)
+        macd_hist = last.get('_MACD_hist', 0)
+        macd_ok = macd_val > macd_sig and macd_hist > 0
+    except:
+        macd_ok = False  # Fallback seguro
     
-    bb_ok = last['Close'] > last['BBL_20_2.0']
+    # ✅ REMOVIDO: bb_ok não era usado e causava KeyError
+    # bb_ok = last['Close'] > last['BBL_20_2.0']  # ❌ Removido
     
     if trend_ok and rsi_ok and macd_ok:
         signal = "COMPRA (SWING)"
@@ -236,7 +254,7 @@ def generate_signal(df, capital, risk_pct, atr_mult=2.0, rr_ratio=3.0):
         "risk_value": risk_value,
         "position_value": position_value,
         "last_rsi": last['RSI'],
-        "last_macd": last['MACD_12_26_9'],
+        "last_macd": last.get('_MACD', 0),
         "last_atr": last['ATR'],
         "trend_ok": trend_ok,
         "rsi_ok": rsi_ok,
@@ -358,11 +376,11 @@ if st.sidebar.button("🔍 Analisar Ativo", type="primary"):
             
             # === 4. Tabela de Dados Técnicos ===
             with st.expander("📋 Ver Dados Técnicos Recentes", expanded=False):
-                display_df = df[['Close', 'EMA21', 'EMA50', 'RSI', 'ATR', 'MACD_12_26_9', 'MACDs_12_26_9']].tail(10).copy()
-                display_df.columns = ['Preço', 'EMA 21', 'EMA 50', 'RSI', 'ATR', 'MACD', 'MACD Signal']
+                display_df = df[['Close', 'EMA21', 'EMA50', 'RSI', 'ATR']].tail(10).copy()
+                display_df.columns = ['Preço', 'EMA 21', 'EMA 50', 'RSI', 'ATR']
                 st.dataframe(display_df.style.format({
                     'Preço': 'R$ {:.2f}', 'EMA 21': 'R$ {:.2f}', 'EMA 50': 'R$ {:.2f}',
-                    'RSI': '{:.1f}', 'ATR': '{:.2f}', 'MACD': '{:.4f}', 'MACD Signal': '{:.4f}'
+                    'RSI': '{:.1f}', 'ATR': '{:.2f}'
                 }), use_container_width=True)
                 
         else:
